@@ -1,7 +1,8 @@
 import os
 import random
 from collections import namedtuple
-
+from collections import deque
+import copy
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.path import Path
@@ -61,8 +62,8 @@ class Board(object):
             generator: Generator of Territories.
         """
         neighbor_ids = risk.definitions.territory_neighbors[territory_id]
-        return (t for t in self.data if t.territory_id in neighbor_ids)
-
+        #return (t for t in self.data if t.territory_id in neighbor_ids)
+        return neighbor_ids
     def hostile_neighbors(self, territory_id):
         """
         Create a generator of all territories neighboring a given territory, of which
@@ -111,7 +112,17 @@ class Board(object):
         Returns:
             bool: True if the input path is valid
         '''
-
+        if len(path) <= 1:
+            return True
+        elif len(path) != len(set(path)):
+            return False
+        else:
+            for i in range(len(path)-1):
+                first=path[i]
+                second=path[i+1]
+                if second not in risk.definitions.territory_neighbors[first]:
+                    return False
+            return True
     
     def is_valid_attack_path(self, path):
         '''
@@ -130,6 +141,14 @@ class Board(object):
         Returns:
             bool: True if the path is an attack path
         '''
+        if len(path) < 2 or self.is_valid_path(path) == False:
+            return False
+        else:
+            owner = self.owner(path[0])
+            for country in path:
+                if path[0] != country and self.owner(country) == owner:
+                    return False
+            return True
 
 
     def cost_of_attack_path(self, path):
@@ -143,7 +162,13 @@ class Board(object):
         Returns:
             bool: the number of enemy armies in the path
         '''
-
+        if path is None:
+            return 0
+        cost = 0
+        for country in path:
+            if country != path[0]:
+                cost += self.armies(country)
+        return cost
 
     def shortest_path(self, source, target):
         '''
@@ -161,22 +186,64 @@ class Board(object):
         Returns:
             [int]: a valid path between source and target that has minimum length; this path is guaranteed to exist
         '''
+        info = [source]
+        q = deque([info])
+        if source == target:
+            return info
+        kys = list(risk.definitions.territory_names.keys())
+        
+        while q:
+            current = q.popleft()
+            board_info = []
+            for territory in kys:
+                if territory in self.neighbors(current[-1]):
+                    board_info.append(territory)
+
+            for territory in board_info:
+                if territory == target:
+                    current.append(territory)
+                    return current
+                copy_info = copy.deepcopy(current)
+                copy_info.append(territory)
+                q.append(copy_info)
+                kys.remove(territory)
+
+    def fortify_helper(self, source, target):
+        info = [source]
+        q = deque([info])
+        board = list(risk.definitions.territory_names.keys())
+
+        if source == target:
+            return info
+
+        while q:
+            current = q.popleft()
+            owner = self.owner(current[-1])
+            adjacent=self.neighbors(current[-1])
+            neighbor= []
+            for country in adjacent:
+                if self.owner(country) == owner:
+                    neighbor.append(country)
+            board_info = []
+            for territory in board:
+                if territory in neighbor:
+                    board_info.append(territory)
+            for territory in board_info:
+                if territory == target:
+                    current.append(territory)
+                    return current
+                copy_info = copy.deepcopy(current)
+                copy_info.append(territory)
+                q.append(copy_info)
+                board.remove(territory)
 
 
     def can_fortify(self, source, target):
-        '''
-        At the end of a turn, a player may choose to fortify a target territory by moving armies from a source territory.
-        In order for this to be a valid move,
-        there must be a valid path between the source and target territories that is owned entirely by the same player.
 
-        Args:
-            source (int): the source territory_id
-            target (int): the target territory_id
-
-        Returns:
-            bool: True if reinforcing the target from the source territory is a valid move
-        '''
-
+        if self.fortify_helper(source, target):
+            return True
+        else:
+            return False
 
     def cheapest_attack_path(self, source, target):
         '''
@@ -191,18 +258,50 @@ class Board(object):
         Returns:
             [int]: a list of territory_ids representing the valid attack path; if no path exists, then it returns None instead
         '''
+        pass
 
+    def attack_helper(self, source, target):
+        info = [source]
+        q = deque([info])
+
+        board = list(risk.definitions.territory_names.keys())
+
+        if source == target:
+            return info
+
+        while q:
+            current = q.popleft()
+            owner_id = self.owner(source)
+            adjacent = self.neighbors(current[-1])
+            neighbor = []
+            for territory in adjacent:
+                if self.owner(territory) != owner_id:
+                    neighbor.append(territory)
+            board_info = []
+            for territory in board:
+                if territory in neighbor:
+                    board_info.append(territory)
+            for territory in board_info:
+                if territory == target:
+                    current.append(territory)
+                    return current
+                copy_info = copy.deepcopy(current)
+                copy_info.append(territory)
+                q.append(copy_info)
+                board.remove(territory)
 
     def can_attack(self, source, target):
         '''
         Args:
             source (int): territory_id of source node
             target (int): territory_id of target node
-
         Returns:
             bool: True if a valid attack path exists between source and target; else False
         '''
 
+        if self.attack_helper(source, target) == None or source==target:
+            return False
+        return True
 
     # ======================= #
     # == Continent Methods == #
