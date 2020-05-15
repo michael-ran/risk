@@ -62,8 +62,7 @@ class Board(object):
             generator: Generator of Territories.
         """
         neighbor_ids = risk.definitions.territory_neighbors[territory_id]
-        #return (t for t in self.data if t.territory_id in neighbor_ids)
-        return neighbor_ids
+        return (t for t in self.data if t.territory_id in neighbor_ids)
     def hostile_neighbors(self, territory_id):
         """
         Create a generator of all territories neighboring a given territory, of which
@@ -186,64 +185,48 @@ class Board(object):
         Returns:
             [int]: a valid path between source and target that has minimum length; this path is guaranteed to exist
         '''
-        info = [source]
-        q = deque([info])
-        if source == target:
-            return info
-        kys = list(risk.definitions.territory_names.keys())
-        
-        while q:
-            current = q.popleft()
-            board_info = []
-            for territory in kys:
-                if territory in self.neighbors(current[-1]):
-                    board_info.append(territory)
-
-            for territory in board_info:
-                if territory == target:
-                    current.append(territory)
-                    return current
-                copy_info = copy.deepcopy(current)
-                copy_info.append(territory)
-                q.append(copy_info)
-                kys.remove(territory)
-
-    def fortify_helper(self, source, target):
-        info = [source]
-        q = deque([info])
-        board = list(risk.definitions.territory_names.keys())
-
-        if source == target:
-            return info
+        dic = {}
+        dic[source] = [source]
+        q = deque()
+        q.append(source)
+        visited = set()
+        visited.add(source)
 
         while q:
-            current = q.popleft()
-            owner = self.owner(current[-1])
-            adjacent=self.neighbors(current[-1])
-            neighbor= []
-            for country in adjacent:
-                if self.owner(country) == owner:
-                    neighbor.append(country)
-            board_info = []
-            for territory in board:
-                if territory in neighbor:
-                    board_info.append(territory)
-            for territory in board_info:
-                if territory == target:
-                    current.append(territory)
-                    return current
-                copy_info = copy.deepcopy(current)
-                copy_info.append(territory)
-                q.append(copy_info)
-                board.remove(territory)
-
+            current_territory = q.popleft()
+            if current_territory == target:
+                return dic[current_territory]
+            for territory in risk.definitions.territory_neighbors[current_territory]:
+                if territory not in visited:
+                    copy_dic = copy.deepcopy(dic[current_territory])
+                    copy_dic.append(territory)
+                    dic[territory] = copy_dic
+                    q.append(territory)
+                visited.add(territory)
 
     def can_fortify(self, source, target):
+        dic = {}
+        dic[source] = [source]
+        q = deque()
+        q.append(source)
+        visited = set()
+        visited.add(source)
 
-        if self.fortify_helper(source, target):
-            return True
-        else:
-            return False
+        while q:
+            current_territory = q.popleft()
+            neighbors = []
+            for elem in risk.definitions.territory_neighbors[current_territory]:
+                if self.owner(elem) == self.owner(current_territory):
+                    neighbors.append(elem)
+            if current_territory == target:
+                return dic[current_territory]
+            for territory in neighbors:
+                if territory not in visited:
+                    copy_dic = copy.deepcopy(dic[current_territory])
+                    copy_dic.append(territory)
+                    dic[territory] = copy_dic
+                    q.append(territory)
+                visited.add(territory)
 
     def cheapest_attack_path(self, source, target):
         '''
@@ -260,36 +243,6 @@ class Board(object):
         '''
         pass
 
-    def attack_helper(self, source, target):
-        info = [source]
-        q = deque([info])
-
-        board = list(risk.definitions.territory_names.keys())
-
-        if source == target:
-            return info
-
-        while q:
-            current = q.popleft()
-            owner_id = self.owner(source)
-            adjacent = self.neighbors(current[-1])
-            neighbor = []
-            for territory in adjacent:
-                if self.owner(territory) != owner_id:
-                    neighbor.append(territory)
-            board_info = []
-            for territory in board:
-                if territory in neighbor:
-                    board_info.append(territory)
-            for territory in board_info:
-                if territory == target:
-                    current.append(territory)
-                    return current
-                copy_info = copy.deepcopy(current)
-                copy_info.append(territory)
-                q.append(copy_info)
-                board.remove(territory)
-
     def can_attack(self, source, target):
         '''
         Args:
@@ -299,9 +252,32 @@ class Board(object):
             bool: True if a valid attack path exists between source and target; else False
         '''
 
-        if self.attack_helper(source, target) == None or source==target:
+        dic = {}
+        dic[source] = [source]
+        q = deque()
+        q.append(source)
+        visited = set()
+        visited.add(source)
+        
+        if source == target:
             return False
-        return True
+
+        while q:
+            current_territory = q.popleft()
+            neighbors = []
+            for elem in risk.definitions.territory_neighbors[current_territory]:
+                if self.owner(elem) != self.owner(source):
+                    neighbors.append(elem)
+            if current_territory == target:
+                return True
+            for territory in neighbors:
+                if territory not in visited:
+                    copy_dic = copy.deepcopy(dic[current_territory])
+                    copy_dic.append(territory)
+                    dic[territory] = copy_dic
+                    q.append(territory)
+                visited.add(territory)
+        return False
 
     # ======================= #
     # == Continent Methods == #
@@ -710,7 +686,6 @@ class Board(object):
             player_id (int): ID of the player.
 
         Returns:
-            list: List of all territory IDs owner by the player.
         """
         return [t.territory_id for t in self.data if t.player_id == player_id]
 
@@ -718,10 +693,8 @@ class Board(object):
         """
         Create a generator of all territories of a player which can attack or move,
         i.e. that have more than one army.
-
         Args:
             player_id (int): ID of the attacking player.
-
         Returns:
             generator: Generator of Territories.
         """
