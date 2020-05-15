@@ -6,7 +6,7 @@ import copy
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.path import Path
-
+import heapdict
 import risk.definitions
 
 Territory = namedtuple('Territory', ['territory_id', 'player_id', 'armies'])
@@ -241,7 +241,32 @@ class Board(object):
         Returns:
             [int]: a list of territory_ids representing the valid attack path; if no path exists, then it returns None instead
         '''
-        pass
+        dic = {}
+        dic[source] = [source]
+        pq = heapdict.heapdict()
+        pq[source] = 0
+        visited = set()
+        visited.add(source)
+        
+        if not self.can_attack(source, target):
+            return None
+        while pq:
+            current_territory, current_priority = pq.popitem()
+            if current_territory == target:
+                return dic[current_territory]
+            new_neighbors = [terr for terr in risk.definitions.territory_neighbors[current_territory] if self.owner(terr) != self.owner(source)]
+
+            for territory in new_neighbors:
+                copy_dic = copy.deepcopy(dic[current_territory])
+                copy_dic.append(territory)
+                path_priority = current_priority + self.armies(territory)
+                if territory not in pq:
+                    dic[territory] = copy_dic
+                    pq[territory] = path_priority
+                
+                visited.add(territory)
+
+
 
     def can_attack(self, source, target):
         '''
